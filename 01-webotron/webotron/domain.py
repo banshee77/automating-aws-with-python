@@ -23,13 +23,13 @@ class DomainManager:
 
         return None
 
-    def temp_create_hosted_zone(self, domain_name):
-        """Create a hosted zone to match domain_name."""
-        zone_name = '.'.join(domain_name.split('.')[-2:]) + '.'
-        return self.client.create_hosted_zone(
-            Name=zone_name,
-            CallerReference=str(uuid.uuid4())
-        )
+    # def create_hosted_zone(self, domain_name):
+    #     """Create a hosted zone to match domain_name."""
+    #     zone_name = '.'.join(domain_name.split('.')[-2:]) + '.'
+    #     return self.client.create_hosted_zone(
+    #         Name=zone_name,
+    #         CallerReference=str(uuid.uuid4())
+    #     )
 
     def create_s3_domain_record(self, zone, domain_name, endpoint):
         """Create a domain record in zone for domain_name."""
@@ -45,6 +45,28 @@ class DomainManager:
                             'AliasTarget': {
                                 'HostedZoneId': endpoint.zone,
                                 'DNSName': endpoint.host,
+                                'EvaluateTargetHealth': False
+                            }
+                            }
+                }
+                ]
+            }
+        )
+
+    def create_cf_domain_record(self, zone, domain_name, cf_domain):
+        """Create a domain record in zone for domain_name."""
+        return self.client.change_resource_record_sets(
+            HostedZoneId=zone['Id'],
+            ChangeBatch={
+                'Comment': 'Created by webotron',
+                'Changes': [{
+                    'Action': 'UPSERT',
+                    'ResourceRecordSet': {
+                            'Name': domain_name,
+                            'Type': 'A',
+                            'AliasTarget': {
+                                'HostedZoneId': 'Z2FDTNDATAQYW2',
+                                'DNSName': cf_domain,
                                 'EvaluateTargetHealth': False
                             }
                             }
