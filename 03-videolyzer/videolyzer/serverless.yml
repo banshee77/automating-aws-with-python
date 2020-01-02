@@ -28,7 +28,11 @@ provider:
           - Arn
     - Effect: "Allow"
       Action:
-        - "dynamodb:PutItem"
+        - sns:Publish
+      Resource: ${self:custom.emailSNSTopicArn}
+    - Effect: "Allow"
+      Action:
+        - dynamodb:PutItem
       Resource:
         Fn::GetAtt:
           - VideosTable
@@ -41,6 +45,7 @@ provider:
       Fn::GetAtt:
         - RekognitionSNSPublishRole
         - Arn
+    EMAIL_SNS_TOPIC_ARN: ${self:custom.emailSNSTopicArn}
 
 custom:
   videosTableName: ${file(../config.${self:provider.stage}.json):videolyzer.videos_table}
@@ -53,6 +58,15 @@ custom:
         - Ref: AWS::Region
         - Ref: AWS::AccountId
         - handleLabelDetectionTopic
+  emailSNSTopicArn:
+    Fn::Join:
+      - ':'
+      - - arn
+        - aws
+        - sns
+        - Ref: AWS::Region
+        - Ref: AWS::AccountId
+        - emailNotificationTopic
   videosBucketArn:
       Fn::Join:
         - ':'
@@ -115,3 +129,15 @@ resources:
                   Action:
                     - sns:Publish
                   Resource: ${self:custom.rekognitionSNSTopicArn}
+    EmailSNSTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        DisplayName: SNS Topic
+        TopicName: emailNotificationTopic
+    EmailSNSSubscription:
+      Type: AWS::SNS::Subscription
+      DependsOn: EmailSNSTopic
+      Properties:
+        Protocol: email
+        TopicArn: ${self:custom.emailSNSTopicArn}
+        Endpoint: ${file(../config.${self:provider.stage}.json):videolyzer.email}

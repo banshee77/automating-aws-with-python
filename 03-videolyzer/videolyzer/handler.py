@@ -1,6 +1,7 @@
 import json
 import os
 import urllib
+from operator import itemgetter
 
 import boto3
 
@@ -70,7 +71,64 @@ def put_labels_in_db(data, video_name, video_bucket):
 
     videos_table.put_item(Item=data)
 
+    return data
+
+
+def send_summary(data):
+    topConfidenceLabels = parseData(data)
+    message = prepareMessage(topConfidenceLabels)
+
+    sns = boto3.client('sns')
+
+    response = sns.publish(
+        TopicArn=os.environ['EMAIL_SNS_TOPIC_ARN'],
+        Message=message,
+        Subject='%s video analysis summary' % (data['videoName'])
+    )
+
+    print(response)
+
     return
+
+def parseData(data):
+    records = data['VideoMetadata']
+    labels = data['Labels']
+
+    parsedLabels = []
+
+    for label in labels:
+            label_data = {
+                'Name': label['Label']['Name'],
+                'Confidence': float(label['Label']['Confidence'])
+            }
+            parsedLabels.append(label_data)
+
+    sortedLabels = sorted(parsedLabels, key=itemgetter(
+        'Confidence'), reverse=True)
+
+    topConfidenceLabels = []
+    names = []
+
+    #remove duplicated Names and get Labels with Confidence >80
+    for item in sortedLabels:
+        for k, v in item.items():
+            if type(v) == str:
+                if v not in names:
+                    names.append(v)
+                    if item['Confidence'] > 80:
+                        topConfidenceLabels.append(item)
+
+    return topConfidenceLabels
+
+
+def prepareMessage(topConfidenceLabels):
+    message = ''
+
+    for item in topConfidenceLabels:
+        message += '%s:     %s\n' % (item['Name'], str(item['Confidence']))
+
+    return message
+
 
 # Lambda events
 
@@ -93,6 +151,7 @@ def handle_label_detection(event, context):
         s3_bucket = message['Video']['S3Bucket']
 
         response = get_video_labels(job_id)
-        put_labels_in_db(response, s3_object, s3_bucket)
+        labels = put_labels_in_db(response, s3_object, s3_bucket)
+        send_summary(labels)        
 
     return
